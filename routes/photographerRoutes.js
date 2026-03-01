@@ -34,9 +34,10 @@ router.delete("/portfolio/video/delete", auth, photographerController.deletePort
 // Portfolio Images
 router.post(
   "/portfolio/images",
+  auth,
   upload.array("images", 10),
   photographerController.uploadPortfolioImages
 );
-router.delete("/portfolio/image/delete", photographerController.deletePortfolioImage);
+router.delete("/portfolio/image/delete", auth, photographerController.deletePortfolioImage);
 
 module.exports = router;

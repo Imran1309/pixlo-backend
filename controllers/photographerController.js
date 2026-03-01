@@ -380,9 +380,10 @@ exports.addReview = async (req, res) => {
 ===================================================== */
 exports.addPortfolioVideo = async (req, res) => {
   try {
-    const { userId, videoLink, title, description } = req.body;
+    const userId = req.user.id;
+    const { videoLink, title, description } = req.body;
 
-    if (!userId || !videoLink || !title) {
+    if (!videoLink || !title) {
       return res.status(400).json({ message: "Required fields missing" });
     }
 
@@ -407,9 +408,10 @@ exports.addPortfolioVideo = async (req, res) => {
 
 exports.editPortfolioVideo = async (req, res) => {
   try {
-    const { userId, videoId, updatedVideo } = req.body;
+    const userId = req.user.id;
+    const { videoId, updatedVideo } = req.body;
 
-    if (!userId || !videoId) {
+    if (!videoId) {
       return res.status(400).json({ message: "Required fields missing" });
     }
 
@@ -443,9 +445,10 @@ exports.editPortfolioVideo = async (req, res) => {
 
 exports.deletePortfolioVideo = async (req, res) => {
   try {
-    const { userId, videoId } = req.body;
+    const userId = req.user.id;
+    const { videoId } = req.body;
 
-    if (!userId || !videoId) {
+    if (!videoId) {
       return res.status(400).json({ message: "Required fields missing" });
     }
 
@@ -476,11 +479,7 @@ exports.deletePortfolioVideo = async (req, res) => {
 ===================================================== */
 exports.uploadPortfolioImages = async (req, res) => {
   try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ message: "User ID is required" });
-    }
+    const userId = req.user.id;
 
     const photographer = await Photographer.findOne({ userId });
 
@@ -492,10 +491,20 @@ exports.uploadPortfolioImages = async (req, res) => {
       return res.status(400).json({ message: "No images uploaded" });
     }
 
-    const uploadedImages = req.files.map((file) => ({
-      url: file.path,
-      public_id: file.filename,
-    }));
+    const USE_LOCAL_STORAGE = process.env.USE_LOCAL_STORAGE === "true";
+    const uploadedImages = req.files.map((file) => {
+      if (USE_LOCAL_STORAGE) {
+        // Construct the URL to be served by the backend
+        return {
+          url: `${req.protocol}://${req.get("host")}/uploads/portfolio/${file.filename}`,
+          public_id: file.filename, // Using filename as local 'public_id'
+        };
+      }
+      return {
+        url: file.path,
+        public_id: file.filename,
+      };
+    });
 
     photographer.portfolioImages.push(...uploadedImages);
     await photographer.save();
@@ -505,17 +514,24 @@ exports.uploadPortfolioImages = async (req, res) => {
       photographer,
     });
   } catch (err) {
-    console.error("Cloudinary upload error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("uploadPortfolioImages error:", err);
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ message: err.message, errors: err.errors });
+    }
+    if (err.name === 'CastError') {
+      return res.status(400).json({ message: `Invalid field: ${err.path}`, value: err.value });
+    }
+    res.status(500).json({ message: "Server error", detail: err.message });
   }
 };
 
 exports.deletePortfolioImage = async (req, res) => {
   try {
-    const { userId, public_id } = req.body;
+    const userId = req.user.id;
+    const { public_id } = req.body;
 
-    if (!userId || !public_id) {
-      return res.status(400).json({ message: "userId and public_id are required" });
+    if (!public_id) {
+      return res.status(400).json({ message: "public_id is required" });
     }
 
     const photographer = await Photographer.findOne({ userId });
@@ -524,7 +540,24 @@ exports.deletePortfolioImage = async (req, res) => {
       return res.status(404).json({ message: "Photographer not found" });
     }
 
-    await cloudinary.uploader.destroy(public_id);
+    const USE_LOCAL_STORAGE = process.env.USE_LOCAL_STORAGE === "true";
+
+    if (USE_LOCAL_STORAGE) {
+      // Local file deletion logic could go here, but let's at least clear from DB for now
+      // Or delete synchronously:
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const filePath = path.join(__dirname, '../uploads/portfolio', public_id);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (err) {
+        console.warn("Could not delete local file:", err.message);
+      }
+    } else {
+      await cloudinary.uploader.destroy(public_id);
+    }
 
     photographer.portfolioImages = photographer.portfolioImages.filter(
       (img) => img.public_id !== public_id

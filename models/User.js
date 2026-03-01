@@ -27,6 +27,7 @@ const UserSchema = new Schema({
     rating: { type: Number, default: 0 },
     reviewCount: { type: Number, default: 0 },
     languages: { type: [String], default: [] },
+    googleId: { type: String, unique: true, sparse: true },
     location: {
         type: { type: String, default: 'Point' },
         coordinates: { type: [Number], default: [0, 0] } // [longitude, latitude]
