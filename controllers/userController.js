@@ -16,9 +16,9 @@ exports.updateMe = async (req, res) => {
         const userId = req.user.id;
         const { name, phone, gender, country, latitude, longitude, languages } = req.body;
         let profilePic = req.body.profilePic;
-
         if (req.file) {
-            profilePic = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+            // Cloudinary storage attaches the full URL to req.file.path
+            profilePic = req.file.path;
         }
 
         const updates = {};
